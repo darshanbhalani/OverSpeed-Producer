@@ -43,7 +43,7 @@ class Program
 
                 try
                 {
-                    var deliveryResult = await producer.ProduceAsync(configuration["BootstrapService:Topic"], new Message<Null, string> { Value = JsonConvert.SerializeObject(dataModels) });
+                    await producer.ProduceAsync(configuration["BootstrapService:Topic"], new Message<Null, string> { Value = JsonConvert.SerializeObject(dataModels) });
                     await Console.Out.WriteLineAsync(JsonConvert.SerializeObject(dataModels));
                     await Console.Out.WriteLineAsync();
                 }
@@ -55,7 +55,6 @@ class Program
             }
         }
 
-       
     }
     private static int randomSpeed()
     {
