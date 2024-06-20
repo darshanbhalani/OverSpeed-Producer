@@ -2,17 +2,12 @@
 using Kafka_Producer;
 using Microsoft.Extensions.Configuration;
 using Newtonsoft.Json;
+using Npgsql;
 
 class Program
 {
-    private static List<string> vehicleNumber = [
-    "GJ18AB1245", "GJ18WR5535", "GJ18KZ1147", "GJ18WW0193", "GJ18UL1925", "GJ18DQ1845", "GJ18RS9505", "GJ18GP0853", "GJ18AB2305", "GJ18KK1234",
-    "GJ18PL7852", "GJ18MR6548", "GJ18YN4379", "GJ18QR7261", "GJ18KT3190", "GJ18FS5017", "GJ18LS2834", "GJ18GH9912", "GJ18VC8745", "GJ18TN2103",
-    "GJ18BP6490", "GJ18DZ1402", "GJ18RM3627", "GJ18YT5348", "GJ18HJ9821", "GJ18AB6453", "GJ18NM2084", "GJ18FW9172", "GJ18ZU1839", "GJ18CL7062",
-    "GJ18MP7384", "GJ18JH5942", "GJ18NC8237", "GJ18PQ4951", "GJ18VR7206", "GJ18BW8491", "GJ18FK2876", "GJ18DC3748", "GJ18MK8231", "GJ18TS9873"
-    //"GJ18WL6378", "GJ18HR4502", "GJ18KS1098", "GJ18QZ5637", "GJ18XT2493", "GJ18LY1945", "GJ18OP3846", "GJ18EV2759", "GJ18MN5041", "GJ18JK6347"
-];
-    
+    private static List<DataModel> vehicles = new List<DataModel>();
+    private static DateTime lastExecutionTime = DateTime.MinValue;
     public static async Task Main(string[] args)
     {
         var configuration = new ConfigurationBuilder()
@@ -27,18 +22,19 @@ class Program
 
         using (var producer = new ProducerBuilder<Null, string>(config).Build())
         {
+            await Console.Out.WriteLineAsync("--------------------------------------------------------------------");
+            await Console.Out.WriteLineAsync("Collecting Vehicles Informations...");
+            await Console.Out.WriteLineAsync("--------------------------------------------------------------------");
+            getVehiclesList(configuration);
+            await Console.Out.WriteLineAsync("Information Collected...");
+            await Console.Out.WriteLineAsync("--------------------------------------------------------------------");
             while (true)
             {
-                List<DataModel> dataModels = new List<DataModel>();
-
-                foreach (var v in vehicleNumber)
+                List<DataModel> dataModels = vehicles;
+                foreach (var v in dataModels)
                 {
-                    dataModels.Add(new DataModel
-                    {
-                        VehicleNumber = v,
-                        VehicleSpeed = randomSpeed(),
-                        TimeStamp = DateTime.Now,
-                    });
+                    v.VehicleSpeed = randomSpeed();
+                    v.TimeStamp = DateTime.Now;
                 }
 
                 try
@@ -51,7 +47,11 @@ class Program
                 {
                     Console.WriteLine($"Delivery failed: {e.Error.Reason}");
                 }
-                Thread.Sleep(1000);
+                if ((DateTime.Now - lastExecutionTime).TotalSeconds >= 600)
+                {
+                    await getVehiclesList(configuration);
+                }
+                    Thread.Sleep(1000);
             }
         }
 
@@ -61,5 +61,35 @@ class Program
         int max = 80;
         Random random = new Random();
         return random.Next(0, max + 1);
+    }
+
+    private static async Task getVehiclesList(IConfiguration configuration)
+    {
+        List<DataModel> tempData = new List<DataModel>();
+        var connectionString = $"Host={configuration["DBConfiguration:Host"]};Port={configuration["DBConfiguration:Port"]};Username={configuration["DBConfiguration:Username"]};Password={configuration["DBConfiguration:Password"]};Database={configuration["DBConfiguration:Database"]}";
+        using (var connection = new NpgsqlConnection(connectionString))
+        {
+            connection.Open();
+                using (var cmd = new NpgsqlCommand("SELECT * FROM GETALLVEHICLES()", connection)) {
+                    using(var reader = cmd.ExecuteReader())
+                    {
+                        if(reader.Read())
+                        {
+                            while(reader.Read())
+                            {
+                                tempData.Add(new DataModel
+                                {
+                                    VehicleNumber=reader.GetString(0),
+                                    VehicleAuthority=reader.GetString(1),
+                                    VehicleCity= reader.GetString(2),
+                                    VehicleState=reader.GetString(3),
+                                });
+                                vehicles = tempData;
+                            }
+                    }
+                }
+
+            }
+        }
     }
 }
